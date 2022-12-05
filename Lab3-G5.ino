@@ -23,14 +23,15 @@ int vueltas = 1;
 unsigned long tiempo = 0;
 long tiempoUltimoCambio = 0;
 
-const byte I2C_SLAVE_ADDR = 0x7F;
-time_t fecha;
-String mensaje;
-//DynamicJsonDocument doc(1024);
+const byte I2C_SLAVE_ADDR = 0x05;
 
+time_t fecha;
+String mensaje = " ";
+String ahora;
 
 void setup() 
 {
+  setTime(17,42,0,28,11,2022);  
   Serial.begin(9600);
   Wire.begin(I2C_SLAVE_ADDR);
   Wire.onRequest(requestEvent);
@@ -43,15 +44,6 @@ const char ASK_FOR_DATA = 'D';
 char request = ' ';
 char requestIndex = 0;
 
-/*void SerializeObject(JsonArray sensors, JsonArray actuators)
-{
-  doc["controller_name"] = "Arduino-nano-5";
-  fecha = now();  
-  doc["date"] = fecha;
-  doc["actuators"] = actuators;
-  doc["sensors"] = sensors;
-  serializeJson(doc, json);
-}*/
 
 void receiveEvent(int bytes)
 {
@@ -60,15 +52,17 @@ void receiveEvent(int bytes)
    request = (char)Wire.read();
   }
 }
+
 void requestEvent()
 {
   if(request == ASK_FOR_LENGTH)
   {
-    Wire.write(mensaje.length());
-    char requestIndex = 0;
+    Wire.write(mensaje.length());    
+    char requestIndex = 0;   
   }
   if(request == ASK_FOR_DATA)
   {
+    
     if(requestIndex < (mensaje.length() / 32)) 
     {
       Wire.write(mensaje.c_str() + requestIndex * 32, 32);
@@ -82,6 +76,35 @@ void requestEvent()
   }
 }
 
+void serializeObject(int luxes, int velocidad)
+{
+  String json;
+  StaticJsonDocument<192> doc; 
+    
+  doc["controller_name"] = "Arduino-nano-5";
+  fecha = now();
+  ahora=String(year(fecha)) + "-" + String(month(fecha)) + "-" + String(day(fecha))+ "T" + String(hour(fecha)) + ":" + String(minute(fecha)) + ":" + String(second(fecha)) + "Z";
+  doc["date"] = ahora;
+    
+  // Armando el array actuators
+  JsonArray arrActuator = doc.createNestedArray("actuators");
+  StaticJsonDocument<52> act;
+  JsonObject actuator = act.to<JsonObject>();
+  actuator["type"]="stepper";
+  actuator["current_value"] = velocidad;
+  arrActuator.add(actuator);
+    
+  // Armando el array sensors
+  JsonArray arrSensor = doc.createNestedArray("sensors");
+  StaticJsonDocument<52> sen;
+  JsonObject sensor = sen.to<JsonObject>();
+  sensor["type"]="fotorresistor";
+  sensor["current_value"] = luxes;
+  arrSensor.add(sensor);  
+    
+  serializeJson(doc, json);
+  mensaje=json;
+}
 
 void loop()
 {
@@ -89,7 +112,7 @@ void loop()
   tiempoUltimoCambio = tiempo;
   regar(20000); // Riega zona 1 durante 20segs.
   zona++;
-  vueltas=1;  
+  vueltas=1;
   delay(5000);  
   
   tiempoUltimoCambio = tiempo;
@@ -128,9 +151,8 @@ void loop()
 
 void obtenerDatos()
 {
-  luz=random(0,1023);
-  //luz = analogRead(PIN_LUZ);
-	velocidad = map(luz, 0, 1023, 1, 4);
+  luz = analogRead(PIN_LUZ);
+  velocidad = map(luz, 0, 1023, 1, 4);
   voltage = luz * (5.0/1023) * 1000;
   resistance = 10000 * ( voltage / ( 5000.0 - voltage) );
   luxes = LUX_CALC_SCALAR * pow(resistance, LUX_CALC_EXPONENT);
@@ -153,7 +175,7 @@ void regar(int duracion)
 void controlarMotor() 
 {    
   if (velocidad < 4) { 
-    /*motor1.setSpeed(velocidad); // El motor girará a la velocidad obtenida de mapear los datos recibidos por la fotoresistencia 
+    motor1.setSpeed(velocidad); // El motor girará a la velocidad obtenida de mapear los datos recibidos por la fotoresistencia 
     Serial.print("regando zona: ");  
     Serial.println(zona);   
     Serial.print("velocidad de riego: ");
@@ -166,7 +188,7 @@ void controlarMotor()
     Serial.println(" lx");
     Serial.println("");
     motor1.step(giro); // El motor realizará la cantidad de pasos pasada por parametros (512, 1/4 de vuelta)
-    */
+    
     serializeObject(luxes, velocidad);
 
     apagado = 0;
@@ -193,33 +215,3 @@ void apagarMotor()
   apagado = 1;
 }
 
-void serializeObject(int luz, int velocidad)
-{
-  //char json[300];
-  String json; 
-  StaticJsonDocument<192> doc; 
-    
-  doc["controller_name"] = "Arduino-nano-5";
-  doc["date"] = "2022-27-11 20:28:00";
-    
-  // Armando el array actuators
-  JsonArray arrActuator = doc.createNestedArray("actuators");
-  StaticJsonDocument<52> act;
-  JsonObject actuator = act.to<JsonObject>();
-  actuator["type"]="stepper";
-  actuator["current_value"] = velocidad;
-  arrActuator.add(actuator);
-    
-  // Armando el array sensors
-  JsonArray arrSensor = doc.createNestedArray("sensors");
-  StaticJsonDocument<52> sen;
-  JsonObject sensor = sen.to<JsonObject>();
-  sensor["type"]="fotorresistor";
-  sensor["current_value"] = luxes;
-  arrSensor.add(sensor);  
-    
-  serializeJson(doc, json);
-  Serial.print("Json: ");
-  Serial.println(json); 
-  mensaje = json;  
-}
